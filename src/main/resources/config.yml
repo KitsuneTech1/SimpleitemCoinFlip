@@ -1,0 +1,47 @@
+# CoinflipPlugin Configuration
+
+# Messages
+messages:
+  prefix: "&6[Coinflip] &r"
+  not-enough-items: "&cYou don't have enough %currency% to create this coinflip!"
+  coinflip-created: "&aYou created a coinflip for &e%amount% %currency%&a!"
+  coinflip-cancelled: "&eYour coinflip has been cancelled and items returned."
+  coinflip-joined: "&e%player% &ahas joined your coinflip!"
+  coinflip-won: "&6&l%winner% &awon the coinflip and received &e%amount% %currency%&a!"
+  cannot-join-own: "&cYou cannot join your own coinflip!"
+
+# GUI Settings
+gui:
+  main-menu-title: "&8&lCoinflip Menu"
+  create-title: "&8&lCreate Coinflip"
+  active-title: "&8&lActive Coinflips"
+  animation-title: "&8&lCoinflip!"
+
+# Animation settings
+animation:
+  # Total duration in ticks (20 ticks = 1 second)
+  duration: 60
+  # How fast the animation starts (in ticks between switches)
+  start-speed: 2
+  # How slow the animation ends (in ticks between switches)
+  end-speed: 10
+
+# Supported currencies
+currencies:
+  diamond:
+    enabled: true
+    display-name: "&bDiamonds"
+    material: DIAMOND
+  iron:
+    enabled: true
+    display-name: "&7Iron Ingots"
+    material: IRON_INGOT
+  emerald:
+    enabled: true
+    display-name: "&aEmeralds"
+    material: EMERALD
+
+# Betting limits
+limits:
+  min-bet: 1
+  max-bet: 64

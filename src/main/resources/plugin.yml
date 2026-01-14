@@ -1,0 +1,20 @@
+name: CoinflipPlugin
+version: ${project.version}
+main: com.coinflip.CoinflipPlugin
+api-version: '1.21'
+description: A GUI-based coinflip gambling plugin with multiple currency support
+author: Owner
+
+commands:
+  coinflip:
+    description: Open the coinflip menu
+    usage: /coinflip
+    aliases: [cf]
+
+permissions:
+  coinflip.use:
+    description: Allows players to use the coinflip system
+    default: true
+  coinflip.admin:
+    description: Allows admin commands
+    default: op
