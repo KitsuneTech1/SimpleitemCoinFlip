@@ -42,22 +42,32 @@ public class CoinflipManager {
     }
 
     /**
+     * Result of attempting to join a coinflip game
+     */
+    public enum JoinResult {
+        SUCCESS,
+        GAME_NOT_FOUND,
+        CANNOT_JOIN_OWN,
+        NOT_ENOUGH_CURRENCY
+    }
+
+    /**
      * Join an existing coinflip game
      */
-    public boolean joinGame(UUID gameId, Player opponent) {
+    public JoinResult joinGame(UUID gameId, Player opponent) {
         CoinflipGame game = pendingGames.get(gameId);
         if (game == null) {
-            return false;
+            return JoinResult.GAME_NOT_FOUND;
         }
 
         // Can't join own game
         if (game.getCreatorId().equals(opponent.getUniqueId())) {
-            return false;
+            return JoinResult.CANNOT_JOIN_OWN;
         }
 
         // Check and remove currency from opponent
         if (!CurrencyManager.removeCurrency(opponent, game.getCurrency(), game.getAmount())) {
-            return false;
+            return JoinResult.NOT_ENOUGH_CURRENCY;
         }
 
         // Move to active games
@@ -65,7 +75,7 @@ public class CoinflipManager {
         game.setOpponent(opponent);
         activeGames.put(gameId, game);
 
-        return true;
+        return JoinResult.SUCCESS;
     }
 
     /**

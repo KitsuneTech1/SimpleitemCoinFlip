@@ -4,6 +4,7 @@ import com.coinflip.CoinflipPlugin;
 import com.coinflip.currency.Currency;
 import com.coinflip.currency.CurrencyManager;
 import com.coinflip.game.CoinflipGame;
+import com.coinflip.game.CoinflipManager;
 import com.coinflip.gui.ActiveCoinflipsGUI;
 import com.coinflip.gui.CoinflipAnimationGUI;
 import com.coinflip.gui.CreateCoinflipGUI;
@@ -215,8 +216,11 @@ public class GUIListener implements Listener {
 
         if (clicked.getType() == Material.PLAYER_HEAD) {
             UUID gameId = ActiveCoinflipsGUI.getGameAtSlot(player, slot);
-            if (gameId == null)
+            if (gameId == null) {
+                player.sendMessage(plugin.colorize("&cCould not find this coinflip. Refreshing..."));
+                activeCoinflipsGUI.open(player);
                 return;
+            }
 
             CoinflipGame game = plugin.getCoinflipManager().getPendingGame(gameId);
             if (game == null) {
@@ -231,7 +235,7 @@ public class GUIListener implements Listener {
                 return;
             }
 
-            // Check if player has enough
+            // Check if player has enough (pre-check for better UX)
             if (!CurrencyManager.hasEnough(player, game.getCurrency(), game.getAmount())) {
                 player.sendMessage(plugin.getMessage("not-enough-items")
                         .replace("%currency%", game.getCurrency().getDisplayNameStripped()));
@@ -239,18 +243,39 @@ public class GUIListener implements Listener {
             }
 
             // Join the game
-            if (plugin.getCoinflipManager().joinGame(gameId, player)) {
-                Player creator = Bukkit.getPlayer(game.getCreatorId());
-                if (creator != null && creator.isOnline()) {
-                    creator.sendMessage(plugin.getMessage("coinflip-joined")
-                            .replace("%player%", player.getName()));
+            CoinflipManager.JoinResult result = plugin.getCoinflipManager().joinGame(gameId, player);
 
-                    // Start the animation
-                    ActiveCoinflipsGUI.clearMapping(player);
-                    animationGUI.startAnimation(creator, player, game);
-                }
-            } else {
-                player.sendMessage(plugin.colorize("&cFailed to join coinflip!"));
+            switch (result) {
+                case SUCCESS:
+                    Player creator = Bukkit.getPlayer(game.getCreatorId());
+                    if (creator != null && creator.isOnline()) {
+                        creator.sendMessage(plugin.getMessage("coinflip-joined")
+                                .replace("%player%", player.getName()));
+
+                        // Start the animation
+                        ActiveCoinflipsGUI.clearMapping(player);
+                        animationGUI.startAnimation(creator, player, game);
+                    } else {
+                        // Creator went offline - refund the player
+                        player.sendMessage(
+                                plugin.colorize("&cThe coinflip creator went offline! You have been refunded."));
+                        CurrencyManager.giveCurrency(player, game.getCurrency(), game.getAmount());
+                    }
+                    break;
+
+                case GAME_NOT_FOUND:
+                    player.sendMessage(plugin.colorize("&cThis coinflip is no longer available!"));
+                    activeCoinflipsGUI.open(player);
+                    break;
+
+                case CANNOT_JOIN_OWN:
+                    player.sendMessage(plugin.getMessage("cannot-join-own"));
+                    break;
+
+                case NOT_ENOUGH_CURRENCY:
+                    player.sendMessage(plugin.getMessage("not-enough-items")
+                            .replace("%currency%", game.getCurrency().getDisplayNameStripped()));
+                    break;
             }
         }
     }
@@ -272,6 +297,19 @@ public class GUIListener implements Listener {
             CreateCoinflipGUI.clearSelection(player);
         }
 
-        ActiveCoinflipsGUI.clearMapping(player);
+        // Only clear the slot-to-game mapping when actually closing the Active
+        // Coinflips GUI
+        // NOT when opening a new GUI (like the animation)
+        if (title.equals(activeTitle)) {
+            // Use a delayed task to allow the click handler to complete first
+            Bukkit.getScheduler().runTaskLater(plugin, () -> {
+                // Only clear if player is no longer in any coinflip-related GUI
+                if (player.getOpenInventory() == null ||
+                        player.getOpenInventory().getTitle() == null ||
+                        !player.getOpenInventory().getTitle().contains("Coinflip")) {
+                    ActiveCoinflipsGUI.clearMapping(player);
+                }
+            }, 5L); // 5 ticks delay
+        }
     }
 }
