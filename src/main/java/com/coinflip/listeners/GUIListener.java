@@ -5,9 +5,11 @@ import com.coinflip.currency.Currency;
 import com.coinflip.currency.CurrencyManager;
 import com.coinflip.game.CoinflipGame;
 import com.coinflip.game.CoinflipManager;
+import com.coinflip.game.ItemCoinflipGame;
 import com.coinflip.gui.ActiveCoinflipsGUI;
 import com.coinflip.gui.CoinflipAnimationGUI;
 import com.coinflip.gui.CreateCoinflipGUI;
+import com.coinflip.gui.ItemSelectGUI;
 import com.coinflip.gui.MainMenuGUI;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
@@ -27,6 +29,7 @@ public class GUIListener implements Listener {
     private final CreateCoinflipGUI createCoinflipGUI;
     private final ActiveCoinflipsGUI activeCoinflipsGUI;
     private final CoinflipAnimationGUI animationGUI;
+    private final ItemSelectGUI itemSelectGUI;
 
     public GUIListener(CoinflipPlugin plugin) {
         this.plugin = plugin;
@@ -34,6 +37,7 @@ public class GUIListener implements Listener {
         this.createCoinflipGUI = new CreateCoinflipGUI(plugin);
         this.activeCoinflipsGUI = new ActiveCoinflipsGUI(plugin);
         this.animationGUI = new CoinflipAnimationGUI(plugin);
+        this.itemSelectGUI = new ItemSelectGUI(plugin);
     }
 
     @EventHandler
@@ -80,11 +84,22 @@ public class GUIListener implements Listener {
         }
 
         // Animation GUI - prevent interaction
-        String animationTitle = plugin.colorize(plugin.getConfig().getString("gui.animation-title", "&8&lCoinflip!"));
+        String animationTitle = plugin.colorize(plugin.getConfig().getString("gui.animation-title", "§8§lCoinflip!"));
         if (title.equals(animationTitle)) {
             event.setCancelled(true);
             return;
         }
+
+        // Item Selection GUI
+        if (title.equals(plugin.colorize("§8§lSelect Item to Bet"))) {
+            event.setCancelled(true);
+            handleItemSelection(player, event.getSlot(), clicked);
+            return;
+        }
+
+        // Item Amount Selection GUI (same title as currency amount but different
+        // handler logic)
+        // This is handled in handleAmountSelection which checks for ItemSelectGUI state
     }
 
     private void handleMainMenu(Player player, int slot, ItemStack clicked) {
@@ -122,12 +137,18 @@ public class GUIListener implements Listener {
             return;
         }
 
+        // Handle custom item selection (CHEST)
+        if (slot == 14 && clicked.getType() == Material.CHEST) {
+            itemSelectGUI.openItemSelection(player);
+            return;
+        }
+
         Currency currency = null;
-        if (slot == 11 && clicked.getType() == Material.DIAMOND) {
+        if (slot == 10 && clicked.getType() == Material.DIAMOND) {
             currency = Currency.DIAMOND;
-        } else if (slot == 13 && clicked.getType() == Material.IRON_INGOT) {
+        } else if (slot == 12 && clicked.getType() == Material.IRON_INGOT) {
             currency = Currency.IRON_INGOT;
-        } else if (slot == 15 && clicked.getType() == Material.EMERALD) {
+        } else if (slot == 16 && clicked.getType() == Material.EMERALD) {
             currency = Currency.EMERALD;
         }
 
@@ -145,9 +166,19 @@ public class GUIListener implements Listener {
         if (clicked.getType() == Material.GRAY_STAINED_GLASS_PANE)
             return;
 
+        // Check if this is item-based or currency-based
+        ItemStack selectedItem = ItemSelectGUI.getSelectedItem(player);
+        Currency currency = CreateCoinflipGUI.getSelectedCurrency(player);
+
         if (clicked.getType() == Material.ARROW) {
-            CreateCoinflipGUI.clearSelection(player);
-            createCoinflipGUI.openCurrencySelection(player);
+            if (selectedItem != null) {
+                // Go back to item selection
+                ItemSelectGUI.clearSelection(player);
+                itemSelectGUI.openItemSelection(player);
+            } else {
+                CreateCoinflipGUI.clearSelection(player);
+                createCoinflipGUI.openCurrencySelection(player);
+            }
             return;
         }
 
@@ -155,7 +186,13 @@ public class GUIListener implements Listener {
             return; // Can't afford
         }
 
-        Currency currency = CreateCoinflipGUI.getSelectedCurrency(player);
+        // Handle item-based coinflip
+        if (selectedItem != null) {
+            handleItemAmountSelection(player, slot, clicked, selectedItem);
+            return;
+        }
+
+        // Handle currency-based coinflip
         if (currency == null) {
             createCoinflipGUI.openCurrencySelection(player);
             return;
@@ -201,6 +238,82 @@ public class GUIListener implements Listener {
         }
     }
 
+    private void handleItemAmountSelection(Player player, int slot, ItemStack clicked, ItemStack selectedItem) {
+        // Parse amount from display name
+        int amount = 1;
+        String displayName = clicked.getItemMeta() != null ? clicked.getItemMeta().getDisplayName() : null;
+
+        if (displayName != null) {
+            // Check for "Bet All"
+            if (displayName.contains("Bet All")) {
+                // Get max amount from player
+                amount = countItems(player, selectedItem);
+            } else {
+                try {
+                    String amountStr = displayName.replaceAll("[^0-9]", "");
+                    if (!amountStr.isEmpty()) {
+                        amount = Integer.parseInt(amountStr);
+                    }
+                } catch (NumberFormatException ignored) {
+                }
+            }
+        }
+
+        // Verify player has enough
+        if (!plugin.getCoinflipManager().hasEnoughItems(player, selectedItem, amount)) {
+            player.sendMessage(plugin.colorize("&cYou don't have enough of this item!"));
+            return;
+        }
+
+        // Create the item-based coinflip
+        ItemCoinflipGame game = plugin.getCoinflipManager().createItemGame(player, selectedItem, amount);
+        if (game != null) {
+            String itemName = game.getItemDisplayName();
+            player.sendMessage(plugin.colorize("&aCoinflip created! &7Betting &e" + amount + "x " + itemName));
+            ItemSelectGUI.clearSelection(player);
+            player.closeInventory();
+        } else {
+            player.sendMessage(plugin.colorize("&cFailed to create coinflip! You may already have one active."));
+        }
+    }
+
+    private void handleItemSelection(Player player, int slot, ItemStack clicked) {
+        if (clicked.getType() == Material.GRAY_STAINED_GLASS_PANE)
+            return;
+
+        if (clicked.getType() == Material.ARROW) {
+            createCoinflipGUI.openCurrencySelection(player);
+            return;
+        }
+
+        if (clicked.getType() == Material.BOOK) {
+            return; // Info item
+        }
+
+        // Find the actual item in the player's inventory that matches this
+        ItemStack[] contents = player.getInventory().getContents();
+        for (int invSlot = 0; invSlot < 36; invSlot++) {
+            ItemStack invItem = contents[invSlot];
+            if (invItem != null && invItem.getType() == clicked.getType()) {
+                // Found a matching item - open amount selection
+                itemSelectGUI.openAmountSelection(player, invItem, invSlot);
+                return;
+            }
+        }
+
+        player.sendMessage(plugin.colorize("&cCouldn't find that item in your inventory!"));
+    }
+
+    private int countItems(Player player, ItemStack item) {
+        int count = 0;
+        for (ItemStack invItem : player.getInventory().getContents()) {
+            if (invItem != null && invItem.isSimilar(item)) {
+                count += invItem.getAmount();
+            }
+        }
+        return count;
+    }
+
     private void handleActiveCoinflips(Player player, int slot, ItemStack clicked) {
         if (clicked.getType() == Material.GRAY_STAINED_GLASS_PANE)
             return;
@@ -214,6 +327,7 @@ public class GUIListener implements Listener {
             return; // No games message
         }
 
+        // Handle currency-based coinflips (player heads)
         if (clicked.getType() == Material.PLAYER_HEAD) {
             UUID gameId = ActiveCoinflipsGUI.getGameAtSlot(player, slot);
             if (gameId == null) {
@@ -275,6 +389,65 @@ public class GUIListener implements Listener {
                 case NOT_ENOUGH_CURRENCY:
                     player.sendMessage(plugin.getMessage("not-enough-items")
                             .replace("%currency%", game.getCurrency().getDisplayNameStripped()));
+                    break;
+            }
+            return;
+        }
+
+        // Handle item-based coinflips (non-head items)
+        UUID itemGameId = ActiveCoinflipsGUI.getItemGameAtSlot(player, slot);
+        if (itemGameId != null) {
+            ItemCoinflipGame itemGame = plugin.getCoinflipManager().getPendingItemGame(itemGameId);
+            if (itemGame == null) {
+                player.sendMessage(plugin.colorize("&cThis coinflip is no longer available!"));
+                activeCoinflipsGUI.open(player);
+                return;
+            }
+
+            // Can't join own game
+            if (itemGame.getCreatorId().equals(player.getUniqueId())) {
+                player.sendMessage(plugin.getMessage("cannot-join-own"));
+                return;
+            }
+
+            // Check if player has enough matching items
+            if (!plugin.getCoinflipManager().hasEnoughItems(player, itemGame.getBetItem(), itemGame.getAmount())) {
+                player.sendMessage(plugin.colorize("&cYou don't have enough " + itemGame.getItemDisplayName() + "!"));
+                return;
+            }
+
+            // Join the item game
+            CoinflipManager.JoinResult result = plugin.getCoinflipManager().joinItemGame(itemGameId, player);
+
+            switch (result) {
+                case SUCCESS:
+                    Player creator = Bukkit.getPlayer(itemGame.getCreatorId());
+                    if (creator != null && creator.isOnline()) {
+                        creator.sendMessage(plugin.colorize("&a" + player.getName() + " has joined your coinflip!"));
+
+                        // Start the animation for item coinflip
+                        ActiveCoinflipsGUI.clearMapping(player);
+                        animationGUI.startItemAnimation(creator, player, itemGame);
+                    } else {
+                        // Creator went offline - refund the player
+                        player.sendMessage(
+                                plugin.colorize("&cThe coinflip creator went offline! You have been refunded."));
+                        // Items already returned by joinItemGame failure handling
+                    }
+                    break;
+
+                case GAME_NOT_FOUND:
+                    player.sendMessage(plugin.colorize("&cThis coinflip is no longer available!"));
+                    activeCoinflipsGUI.open(player);
+                    break;
+
+                case CANNOT_JOIN_OWN:
+                    player.sendMessage(plugin.getMessage("cannot-join-own"));
+                    break;
+
+                case NOT_ENOUGH_CURRENCY:
+                    player.sendMessage(
+                            plugin.colorize("&cYou don't have enough " + itemGame.getItemDisplayName() + "!"));
                     break;
             }
         }

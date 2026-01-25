@@ -2,6 +2,7 @@ package com.coinflip.gui;
 
 import com.coinflip.CoinflipPlugin;
 import com.coinflip.game.CoinflipGame;
+import com.coinflip.game.ItemCoinflipGame;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
@@ -16,13 +17,14 @@ public class ActiveCoinflipsGUI {
 
     private final CoinflipPlugin plugin;
     private static final Map<UUID, Map<Integer, UUID>> slotToGameMap = new HashMap<>();
+    private static final Map<UUID, Map<Integer, UUID>> slotToItemGameMap = new HashMap<>();
 
     public ActiveCoinflipsGUI(CoinflipPlugin plugin) {
         this.plugin = plugin;
     }
 
     public void open(Player player) {
-        String title = plugin.colorize(plugin.getConfig().getString("gui.active-title", "&8&lActive Coinflips"));
+        String title = plugin.colorize(plugin.getConfig().getString("gui.active-title", "§8§lActive Coinflips"));
         Inventory gui = Bukkit.createInventory(null, 54, title);
 
         // Fill with glass panes
@@ -32,9 +34,13 @@ public class ActiveCoinflipsGUI {
         }
 
         Collection<CoinflipGame> games = plugin.getCoinflipManager().getPendingGames();
+        Collection<ItemCoinflipGame> itemGames = plugin.getCoinflipManager().getPendingItemGames();
         Map<Integer, UUID> playerSlotMap = new HashMap<>();
+        Map<Integer, UUID> playerItemSlotMap = new HashMap<>();
 
         int slot = 10;
+
+        // Display currency-based coinflips
         for (CoinflipGame game : games) {
             if (slot > 43)
                 break; // Max games displayed
@@ -48,17 +54,17 @@ public class ActiveCoinflipsGUI {
             ItemStack head = new ItemStack(Material.PLAYER_HEAD);
             SkullMeta skullMeta = (SkullMeta) head.getItemMeta();
             skullMeta.setOwningPlayer(Bukkit.getOfflinePlayer(game.getCreatorId()));
-            skullMeta.setDisplayName(plugin.colorize("&e&l" + game.getCreatorName() + "'s Coinflip"));
+            skullMeta.setDisplayName(plugin.colorize("§e§l" + game.getCreatorName() + "'s Coinflip"));
 
             List<String> lore = new ArrayList<>();
             lore.add(plugin
-                    .colorize("&7Betting: &e" + game.getAmount() + " " + game.getCurrency().getDisplayNameStripped()));
+                    .colorize("§7Betting: §e" + game.getAmount() + " " + game.getCurrency().getDisplayNameStripped()));
             lore.add("");
 
             if (game.getCreatorId().equals(player.getUniqueId())) {
-                lore.add(plugin.colorize("&cThis is your coinflip!"));
+                lore.add(plugin.colorize("§cThis is your coinflip!"));
             } else {
-                lore.add(plugin.colorize("&aClick to join this coinflip!"));
+                lore.add(plugin.colorize("§aClick to join this coinflip!"));
             }
 
             skullMeta.setLore(lore);
@@ -69,19 +75,55 @@ public class ActiveCoinflipsGUI {
             slot++;
         }
 
+        // Display item-based coinflips
+        for (ItemCoinflipGame game : itemGames) {
+            if (slot > 43)
+                break; // Max games displayed
+
+            // Skip certain slots (borders)
+            while (slot % 9 == 0 || slot % 9 == 8) {
+                slot++;
+            }
+
+            // Create an item display showing the bet item
+            ItemStack displayItem = game.getBetItem().clone();
+            ItemMeta meta = displayItem.getItemMeta();
+            meta.setDisplayName(plugin.colorize("§d§l" + game.getCreatorName() + "'s Item Coinflip"));
+
+            List<String> lore = new ArrayList<>();
+            lore.add(plugin.colorize("§7Betting: §d" + game.getAmount() + "x " + game.getItemDisplayName()));
+            lore.add("");
+
+            if (game.getCreatorId().equals(player.getUniqueId())) {
+                lore.add(plugin.colorize("§cThis is your coinflip!"));
+            } else {
+                lore.add(plugin.colorize("§aClick to join this coinflip!"));
+                lore.add(plugin.colorize("§7You need: §e" + game.getAmount() + "x " + game.getItemDisplayName()));
+            }
+
+            meta.setLore(lore);
+            displayItem.setItemMeta(meta);
+            displayItem.setAmount(Math.min(game.getAmount(), 64));
+
+            gui.setItem(slot, displayItem);
+            playerItemSlotMap.put(slot, game.getGameId());
+            slot++;
+        }
+
         slotToGameMap.put(player.getUniqueId(), playerSlotMap);
+        slotToItemGameMap.put(player.getUniqueId(), playerItemSlotMap);
 
         // No games message
-        if (games.isEmpty()) {
-            ItemStack noGames = createItem(Material.BARRIER, "&c&lNo Active Coinflips",
-                    "&7There are no coinflips to join right now.",
-                    "&7Create your own!");
+        if (games.isEmpty() && itemGames.isEmpty()) {
+            ItemStack noGames = createItem(Material.BARRIER, "§c§lNo Active Coinflips",
+                    "§7There are no coinflips to join right now.",
+                    "§7Create your own!");
             gui.setItem(22, noGames);
         }
 
         // Back button
-        ItemStack backButton = createItem(Material.ARROW, "&c&lBack",
-                "&7Return to main menu");
+        ItemStack backButton = createItem(Material.ARROW, "§c§lBack",
+                "§7Return to main menu");
         gui.setItem(49, backButton);
 
         player.openInventory(gui);
@@ -92,8 +134,14 @@ public class ActiveCoinflipsGUI {
         return map != null ? map.get(slot) : null;
     }
 
+    public static UUID getItemGameAtSlot(Player player, int slot) {
+        Map<Integer, UUID> map = slotToItemGameMap.get(player.getUniqueId());
+        return map != null ? map.get(slot) : null;
+    }
+
     public static void clearMapping(Player player) {
         slotToGameMap.remove(player.getUniqueId());
+        slotToItemGameMap.remove(player.getUniqueId());
     }
 
     private ItemStack createItem(Material material, String name, String... lore) {

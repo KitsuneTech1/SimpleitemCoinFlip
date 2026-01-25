@@ -26,12 +26,12 @@ public class CreateCoinflipGUI {
     }
 
     public void openCurrencySelection(Player player) {
-        String title = plugin.colorize(plugin.getConfig().getString("gui.create-title", "&8&lCreate Coinflip"));
-        Inventory gui = Bukkit.createInventory(null, 27, title);
+        String title = plugin.colorize(plugin.getConfig().getString("gui.create-title", "§8§lCreate Coinflip"));
+        Inventory gui = Bukkit.createInventory(null, 36, title);
 
         // Fill with glass panes
         ItemStack filler = createItem(Material.GRAY_STAINED_GLASS_PANE, " ");
-        for (int i = 0; i < 27; i++) {
+        for (int i = 0; i < 36; i++) {
             gui.setItem(i, filler);
         }
 
@@ -41,7 +41,7 @@ public class CreateCoinflipGUI {
                 "&7Click to bet with diamonds",
                 "",
                 "&7You have: &b" + diamondCount);
-        gui.setItem(11, diamondItem);
+        gui.setItem(10, diamondItem);
 
         // Iron option
         int ironCount = CurrencyManager.countCurrency(player, Currency.IRON_INGOT);
@@ -49,7 +49,15 @@ public class CreateCoinflipGUI {
                 "&7Click to bet with iron ingots",
                 "",
                 "&7You have: &f" + ironCount);
-        gui.setItem(13, ironItem);
+        gui.setItem(12, ironItem);
+
+        // Custom Item option (NEW!)
+        ItemStack customItem = createItem(Material.CHEST, "&d&lCustom Item",
+                "&7Click to bet any item from",
+                "&7your inventory!",
+                "",
+                "&dBet swords, armor, tools & more!");
+        gui.setItem(14, customItem);
 
         // Emerald option
         int emeraldCount = CurrencyManager.countCurrency(player, Currency.EMERALD);
@@ -57,12 +65,12 @@ public class CreateCoinflipGUI {
                 "&7Click to bet with emeralds",
                 "",
                 "&7You have: &a" + emeraldCount);
-        gui.setItem(15, emeraldItem);
+        gui.setItem(16, emeraldItem);
 
         // Back button
         ItemStack backButton = createItem(Material.ARROW, "&c&lBack",
                 "&7Return to main menu");
-        gui.setItem(22, backButton);
+        gui.setItem(31, backButton);
 
         player.openInventory(gui);
     }
